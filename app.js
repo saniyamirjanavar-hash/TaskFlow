@@ -2217,17 +2217,233 @@ document.addEventListener('DOMContentLoaded', () => {
         ],
         createdAt: Date.now() - 3600000 * 3
       },
-      {
-        id: 'sample_3',
-        title: 'Weekly Internship Project Review',
-        description: 'Prepare documentation and demo presentation for evaluation',
-        category: 'Personal',
-        priority: 'medium',
-        dueDate: today,
-        completed: true,
-        subtasks: [],
-        createdAt: Date.now() - 3600000 * 24
+  // ==========================================
+  // TASKFLOW AI CHATBOT COPILOT MODULE
+  // ==========================================
+  const aiTriggerBtn = document.getElementById('ai-trigger-btn');
+  const aiChatWindow = document.getElementById('ai-chat-window');
+  const aiCloseBtn = document.getElementById('ai-close-btn');
+  const aiChatMessages = document.getElementById('ai-chat-messages');
+  const aiChatForm = document.getElementById('ai-chat-form');
+  const aiChatInput = document.getElementById('ai-chat-input');
+  const aiKeyInput = document.getElementById('ai-key-input');
+  const aiKeySaveBtn = document.getElementById('ai-key-save-btn');
+
+  if (aiKeyInput) {
+    aiKeyInput.value = aiApiKey || '';
+  }
+
+  if (aiKeySaveBtn && aiKeyInput) {
+    aiKeySaveBtn.addEventListener('click', () => {
+      const key = aiKeyInput.value.trim();
+      aiApiKey = key;
+      localStorage.setItem('taskflow-ai-key', key);
+      showToast(key ? 'Gemini API Key saved!' : 'Cleared API Key. Using built-in AI.', 'info');
+    });
+  }
+
+  function toggleAiChat() {
+    if (!aiChatWindow) return;
+    const isHidden = aiChatWindow.style.display === 'none' || !aiChatWindow.style.display;
+    aiChatWindow.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden && aiChatInput) {
+      setTimeout(() => aiChatInput.focus(), 100);
+    }
+  }
+
+  if (aiTriggerBtn) aiTriggerBtn.addEventListener('click', toggleAiChat);
+  if (aiCloseBtn) aiCloseBtn.addEventListener('click', toggleAiChat);
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      toggleAiChat();
+    }
+  });
+
+  // Event Delegation for Prompt Chips
+  if (aiChatMessages) {
+    aiChatMessages.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip-btn');
+      if (chip) {
+        const promptText = chip.getAttribute('data-prompt') || chip.textContent.trim();
+        if (promptText) {
+          sendAiUserMessage(promptText);
+        }
       }
-    ];
+    });
+  }
+
+  if (aiChatForm && aiChatInput) {
+    aiChatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = aiChatInput.value.trim();
+      if (!text) return;
+      sendAiUserMessage(text);
+      aiChatInput.value = '';
+    });
+  }
+
+  async function sendAiUserMessage(promptText) {
+    appendChatMessage('user', promptText);
+    const typingElem = showTypingIndicator();
+
+    try {
+      const reply = await generateAiResponse(promptText);
+      if (typingElem) typingElem.remove();
+      appendChatMessage('bot', reply);
+    } catch (err) {
+      console.error('AI Response Error:', err);
+      if (typingElem) typingElem.remove();
+      const fallbackReply = generateFallbackNlpResponse(promptText);
+      appendChatMessage('bot', fallbackReply);
+    }
+  }
+
+  function appendChatMessage(sender, htmlContent) {
+    if (!aiChatMessages) return;
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `chat-msg ${sender === 'user' ? 'user-msg' : 'bot-msg'}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'chat-avatar';
+    avatar.textContent = sender === 'user' ? '👤' : '🤖';
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'chat-text';
+    textDiv.innerHTML = formatAiResponseMarkdown(htmlContent);
+
+    msgDiv.appendChild(avatar);
+    msgDiv.appendChild(textDiv);
+    aiChatMessages.appendChild(msgDiv);
+    aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+  }
+
+  function showTypingIndicator() {
+    if (!aiChatMessages) return null;
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-msg bot-msg';
+    msgDiv.innerHTML = `
+      <div class="chat-avatar">🤖</div>
+      <div class="chat-text">
+        <div class="typing-dots">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+    `;
+    aiChatMessages.appendChild(msgDiv);
+    aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+    return msgDiv;
+  }
+
+  async function generateAiResponse(userPrompt) {
+    // 1. Primary: Try Server-Side Express Proxy (/api/chat)
+    try {
+      const serverRes = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: userPrompt, tasks: tasks.slice(0, 10) })
+      });
+
+      if (serverRes.ok) {
+        const data = await serverRes.json();
+        if (data.success && data.text) {
+          return data.text;
+        }
+      }
+    } catch (e) {
+      // Server route unavailable (e.g. static host), continue to client fallbacks
+    }
+
+    // 2. Secondary: Try Direct Gemini REST API if user saved API key in localStorage
+    const key = aiApiKey || localStorage.getItem('taskflow-ai-key');
+    if (key && key !== 'your_gemini_api_key_here') {
+      const activeTasksStr = tasks.slice(0, 10).map(t => `- "${t.title}" (${t.category}, Priority: ${t.priority}, Due: ${t.dueDate || 'None'}, Completed: ${t.completed})`).join('\n');
+      const systemPrompt = `You are TaskFlow AI, an intelligent productivity companion.
+CURRENT USER TASKS:
+${activeTasksStr}
+
+USER PROMPT: "${userPrompt}"
+Respond helpfully, concisely (under 120 words), and format with clean markdown bullet points.`;
+
+      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+      for (const modelName of candidateModels) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) return text;
+          }
+        } catch (err) {
+          console.warn(`Direct Gemini API failed with ${modelName}:`, err);
+        }
+      }
+    }
+
+    // 3. Fallback: Intelligent Client-Side NLP Engine
+    return generateFallbackNlpResponse(userPrompt);
+  }
+
+  function generateFallbackNlpResponse(promptText) {
+    const text = promptText.toLowerCase();
+    const activeTasks = tasks.filter(t => !t.completed);
+    const completedTasks = tasks.filter(t => t.completed);
+    const highPriority = activeTasks.filter(t => t.priority === 'high');
+    const today = getTodayStr();
+    const dueToday = activeTasks.filter(t => t.dueDate === today);
+
+    if (text.includes('priority') || text.includes('top') || text.includes('important')) {
+      if (highPriority.length === 0) {
+        return `🌟 <strong>Great job!</strong> You have no high-priority tasks pending right now. Total active tasks: <strong>${activeTasks.length}</strong>.`;
+      }
+      const listHtml = highPriority.slice(0, 3).map(t => `• <strong>${escapeHtml(t.title)}</strong> (${t.category})`).join('<br>');
+      return `🎯 <strong>Top High-Priority Tasks (${highPriority.length}):</strong><br>${listHtml}<br><br><em>Tip: Focus on completing these first to maintain momentum!</em>`;
+    }
+
+    if (text.includes('schedule') || text.includes('today') || text.includes('plan')) {
+      if (activeTasks.length === 0) {
+        return `🎉 Your schedule is clear! All tasks are completed. Use the add task form to start your next milestone.`;
+      }
+      const todayList = dueToday.length > 0 ? dueToday : activeTasks.slice(0, 3);
+      const scheduleHtml = todayList.map((t, idx) => `<strong>${9 + idx * 2}:00 AM</strong> — ${escapeHtml(t.title)} <span style="opacity:0.8">(${t.priority.toUpperCase()})</span>`).join('<br>');
+      return `📅 <strong>Suggested Daily Schedule:</strong><br>${scheduleHtml}<br><br>💡 <em>Take 10-minute breaks between deep work sessions!</em>`;
+    }
+
+    if (text.includes('tip') || text.includes('help') || text.includes('overdue') || text.includes('advice')) {
+      return `💡 <strong>Productivity Booster Tips:</strong><br>
+• <strong>2-Minute Rule:</strong> If a subtask takes under 2 mins, do it right away.<br>
+• <strong>Category Focus:</strong> Group your <strong>${activeTasks.length} active tasks</strong> by category to reduce context switching.<br>
+• <strong>Subtask Breakdown:</strong> Break large tasks into checklist items to stay motivated!`;
+    }
+
+    // General Task Overview Response
+    const activeCount = activeTasks.length;
+    const doneCount = completedTasks.length;
+    const rate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+
+    return `🤖 <strong>TaskFlow Summary:</strong><br>
+• Active Tasks: <strong>${activeCount}</strong><br>
+• Completed Tasks: <strong>${doneCount}</strong><br>
+• Completion Rate: <strong>${rate}%</strong><br><br>
+How else can I help you organize your workflow today?`;
+  }
+
+  function formatAiResponseMarkdown(rawText) {
+    if (!rawText) return '';
+    let formatted = rawText
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n/g, '<br>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+    return formatted;
   }
 });
+
