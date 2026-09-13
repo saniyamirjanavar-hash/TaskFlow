@@ -2252,6 +2252,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (aiTriggerBtn) aiTriggerBtn.addEventListener('click', toggleAiChat);
+  if (headerAiBtn) headerAiBtn.addEventListener('click', toggleAiChat);
   if (aiCloseBtn) aiCloseBtn.addEventListener('click', toggleAiChat);
 
   document.addEventListener('keydown', (e) => {
