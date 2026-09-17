@@ -2233,224 +2233,416 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiChatInput = document.getElementById('ai-chat-input');
     const aiKeyInput = document.getElementById('ai-key-input');
     const aiKeySaveBtn = document.getElementById('ai-key-save-btn');
+    const aiMicBtn = document.getElementById('ai-mic-btn');
+    const aiStopMicBtn = document.getElementById('ai-stop-mic-btn');
+    const aiListeningBanner = document.getElementById('ai-listening-banner');
+    const aiTtsToggle = document.getElementById('ai-tts-toggle');
+    const aiClearChat = document.getElementById('ai-clear-chat');
 
-  if (aiKeyInput) {
-    aiKeyInput.value = aiApiKey || '';
-  }
+    let ttsEnabled = localStorage.getItem('taskflow-tts') !== 'false';
+    let isRecording = false;
+    let recognition = null;
 
-  if (aiKeySaveBtn && aiKeyInput) {
-    aiKeySaveBtn.addEventListener('click', () => {
-      const key = aiKeyInput.value.trim();
-      aiApiKey = key;
-      localStorage.setItem('taskflow-ai-key', key);
-      showToast(key ? 'Gemini API Key saved!' : 'Cleared API Key. Using built-in AI.', 'info');
-    });
-  }
-
-  function toggleAiChat() {
-    if (!aiChatWindow) return;
-    const isHidden = aiChatWindow.style.display === 'none' || !aiChatWindow.style.display;
-    aiChatWindow.style.display = isHidden ? 'flex' : 'none';
-    if (isHidden && aiChatInput) {
-      setTimeout(() => aiChatInput.focus(), 100);
+    if (aiKeyInput) {
+      aiKeyInput.value = aiApiKey || '';
     }
-  }
 
-  if (aiTriggerBtn) aiTriggerBtn.addEventListener('click', toggleAiChat);
-  if (headerAiBtn) headerAiBtn.addEventListener('click', toggleAiChat);
-  if (aiCloseBtn) aiCloseBtn.addEventListener('click', toggleAiChat);
-
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      toggleAiChat();
-    }
-  });
-
-  // Event Delegation for Prompt Chips
-  if (aiChatMessages) {
-    aiChatMessages.addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip-btn');
-      if (chip) {
-        const promptText = chip.getAttribute('data-prompt') || chip.textContent.trim();
-        if (promptText) {
-          sendAiUserMessage(promptText);
-        }
-      }
-    });
-  }
-
-  if (aiChatForm && aiChatInput) {
-    aiChatForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = aiChatInput.value.trim();
-      if (!text) return;
-      sendAiUserMessage(text);
-      aiChatInput.value = '';
-    });
-  }
-
-  async function sendAiUserMessage(promptText) {
-    appendChatMessage('user', promptText);
-    const typingElem = showTypingIndicator();
-
-    try {
-      const reply = await generateAiResponse(promptText);
-      if (typingElem) typingElem.remove();
-      appendChatMessage('bot', reply);
-    } catch (err) {
-      console.error('AI Response Error:', err);
-      if (typingElem) typingElem.remove();
-      const fallbackReply = generateFallbackNlpResponse(promptText);
-      appendChatMessage('bot', fallbackReply);
-    }
-  }
-
-  function appendChatMessage(sender, htmlContent) {
-    if (!aiChatMessages) return;
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `chat-msg ${sender === 'user' ? 'user-msg' : 'bot-msg'}`;
-
-    const avatar = document.createElement('div');
-    avatar.className = 'chat-avatar';
-    avatar.textContent = sender === 'user' ? '👤' : '🤖';
-
-    const textDiv = document.createElement('div');
-    textDiv.className = 'chat-text';
-    textDiv.innerHTML = formatAiResponseMarkdown(htmlContent);
-
-    msgDiv.appendChild(avatar);
-    msgDiv.appendChild(textDiv);
-    aiChatMessages.appendChild(msgDiv);
-    aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
-  }
-
-  function showTypingIndicator() {
-    if (!aiChatMessages) return null;
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'chat-msg bot-msg';
-    msgDiv.innerHTML = `
-      <div class="chat-avatar">🤖</div>
-      <div class="chat-text">
-        <div class="typing-dots">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-        </div>
-      </div>
-    `;
-    aiChatMessages.appendChild(msgDiv);
-    aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
-    return msgDiv;
-  }
-
-  async function generateAiResponse(userPrompt) {
-    // 1. Primary: Try Server-Side Express Proxy (/api/chat)
-    try {
-      const serverRes = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userPrompt, tasks: tasks.slice(0, 10) })
+    if (aiKeySaveBtn && aiKeyInput) {
+      aiKeySaveBtn.addEventListener('click', () => {
+        const key = aiKeyInput.value.trim();
+        aiApiKey = key;
+        localStorage.setItem('taskflow-ai-key', key);
+        showToast(key ? 'Gemini API Key saved!' : 'Cleared API Key. Using built-in AI.', 'info');
       });
-
-      if (serverRes.ok) {
-        const data = await serverRes.json();
-        if (data.success && data.text) {
-          return data.text;
-        }
-      }
-    } catch (e) {
-      // Server route unavailable (e.g. static host), continue to client fallbacks
     }
 
-    // 2. Secondary: Try Direct Gemini REST API if user saved API key in localStorage
-    const key = aiApiKey || localStorage.getItem('taskflow-ai-key');
-    if (key && key !== 'your_gemini_api_key_here') {
-      const activeTasksStr = tasks.slice(0, 10).map(t => `- "${t.title}" (${t.category}, Priority: ${t.priority}, Due: ${t.dueDate || 'None'}, Completed: ${t.completed})`).join('\n');
-      const systemPrompt = `You are TaskFlow AI, an intelligent productivity companion.
+    if (aiTtsToggle) {
+      aiTtsToggle.style.opacity = ttsEnabled ? '1' : '0.5';
+      aiTtsToggle.addEventListener('click', () => {
+        ttsEnabled = !ttsEnabled;
+        localStorage.setItem('taskflow-tts', ttsEnabled);
+        aiTtsToggle.style.opacity = ttsEnabled ? '1' : '0.5';
+        showToast(`Voice responses ${ttsEnabled ? 'enabled 🔊' : 'muted 🔇'}`, 'info');
+      });
+    }
+
+    if (aiClearChat && aiChatMessages) {
+      aiClearChat.addEventListener('click', () => {
+        aiChatMessages.innerHTML = `
+          <div class="chat-msg bot-msg">
+            <div class="chat-avatar">🤖</div>
+            <div class="chat-text">
+              Chat history cleared! Ask me anything or speak a command like <em>"add task Buy groceries"</em>!
+              <div class="prompt-chips">
+                <button type="button" class="chip-btn" data-prompt="Add task Finish project report">➕ Add Task</button>
+                <button type="button" class="chip-btn" data-prompt="Turn dark mode on">🌙 Dark Mode</button>
+                <button type="button" class="chip-btn" data-prompt="What are my top priorities for today?">🎯 Top Priorities</button>
+              </div>
+            </div>
+          </div>
+        `;
+        showToast('Chat history cleared', 'info');
+      });
+    }
+
+    function toggleAiChat() {
+      if (!aiChatWindow) return;
+      const isHidden = aiChatWindow.style.display === 'none' || !aiChatWindow.style.display;
+      aiChatWindow.style.display = isHidden ? 'flex' : 'none';
+      if (isHidden && aiChatInput) {
+        setTimeout(() => aiChatInput.focus(), 100);
+      }
+    }
+
+    if (aiTriggerBtn) aiTriggerBtn.addEventListener('click', toggleAiChat);
+    if (headerAiBtn) headerAiBtn.addEventListener('click', toggleAiChat);
+    if (aiCloseBtn) aiCloseBtn.addEventListener('click', toggleAiChat);
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        toggleAiChat();
+      }
+    });
+
+    // Voice Audio Recording (Web Speech API)
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRec) {
+      try {
+        recognition = new SpeechRec();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+          isRecording = true;
+          if (aiMicBtn) aiMicBtn.classList.add('listening');
+          if (aiListeningBanner) aiListeningBanner.style.display = 'flex';
+        };
+
+        recognition.onresult = (e) => {
+          const transcript = e.results[0][0].transcript;
+          if (aiChatInput) aiChatInput.value = transcript;
+          sendAiUserMessage(transcript);
+        };
+
+        recognition.onerror = (err) => {
+          console.warn('Speech recognition error:', err);
+          stopVoiceRecording();
+        };
+
+        recognition.onend = () => {
+          stopVoiceRecording();
+        };
+      } catch (err) {
+        console.warn('Speech recognition setup error:', err);
+      }
+    }
+
+    function startVoiceRecording() {
+      if (!recognition) {
+        showToast('Voice recording is not supported in your browser.', 'warning');
+        return;
+      }
+      try {
+        recognition.start();
+      } catch (err) {
+        stopVoiceRecording();
+      }
+    }
+
+    function stopVoiceRecording() {
+      isRecording = false;
+      if (aiMicBtn) aiMicBtn.classList.remove('listening');
+      if (aiListeningBanner) aiListeningBanner.style.display = 'none';
+      if (recognition) {
+        try { recognition.stop(); } catch(e) {}
+      }
+    }
+
+    if (aiMicBtn) {
+      aiMicBtn.addEventListener('click', () => {
+        if (isRecording) {
+          stopVoiceRecording();
+        } else {
+          startVoiceRecording();
+        }
+      });
+    }
+
+    if (aiStopMicBtn) {
+      aiStopMicBtn.addEventListener('click', stopVoiceRecording);
+    }
+
+    // Prompt Chips Event Delegation
+    if (aiChatMessages) {
+      aiChatMessages.addEventListener('click', (e) => {
+        const chip = e.target.closest('.chip-btn');
+        if (chip) {
+          const promptText = chip.getAttribute('data-prompt') || chip.textContent.trim();
+          if (promptText) {
+            sendAiUserMessage(promptText);
+          }
+        }
+      });
+    }
+
+    if (aiChatForm && aiChatInput) {
+      aiChatForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = aiChatInput.value.trim();
+        if (!text) return;
+        sendAiUserMessage(text);
+        aiChatInput.value = '';
+      });
+    }
+
+    async function sendAiUserMessage(promptText) {
+      appendChatMessage('user', promptText);
+      const typingElem = showTypingIndicator();
+
+      try {
+        const reply = await generateAiResponse(promptText);
+        if (typingElem) typingElem.remove();
+        appendChatMessage('bot', reply);
+        speakAiText(reply);
+      } catch (err) {
+        console.error('AI Response Error:', err);
+        if (typingElem) typingElem.remove();
+        const fallbackReply = generateFallbackNlpResponse(promptText);
+        appendChatMessage('bot', fallbackReply);
+        speakAiText(fallbackReply);
+      }
+    }
+
+    function speakAiText(text) {
+      if (!ttsEnabled || !('speechSynthesis' in window)) return;
+      try {
+        window.speechSynthesis.cancel();
+        const cleanText = text.replace(/<[^>]*>/g, '').replace(/[*_#`~]/g, '');
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.warn('TTS Speech error:', err);
+      }
+    }
+
+    function appendChatMessage(sender, htmlContent) {
+      if (!aiChatMessages) return;
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `chat-msg ${sender === 'user' ? 'user-msg' : 'bot-msg'}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = 'chat-avatar';
+      avatar.textContent = sender === 'user' ? '👤' : '🤖';
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'chat-text';
+      textDiv.innerHTML = formatAiResponseMarkdown(htmlContent);
+
+      msgDiv.appendChild(avatar);
+      msgDiv.appendChild(textDiv);
+      aiChatMessages.appendChild(msgDiv);
+      aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+    }
+
+    function showTypingIndicator() {
+      if (!aiChatMessages) return null;
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'chat-msg bot-msg';
+      msgDiv.innerHTML = `
+        <div class="chat-avatar">🤖</div>
+        <div class="chat-text">
+          <div class="typing-dots">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      `;
+      aiChatMessages.appendChild(msgDiv);
+      aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+      return msgDiv;
+    }
+
+    async function generateAiResponse(userPrompt) {
+      // Check for direct Action Commands first!
+      const actionResult = processDirectTaskActionCommand(userPrompt);
+      if (actionResult) return actionResult;
+
+      // 1. Primary: Try Server-Side Express Proxy (/api/chat)
+      try {
+        const serverRes = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: userPrompt, tasks: tasks.slice(0, 10) })
+        });
+
+        if (serverRes.ok) {
+          const data = await serverRes.json();
+          if (data.success && data.text) {
+            return data.text;
+          }
+        }
+      } catch (e) {
+        // Server route unavailable (e.g. static host), continue to client fallbacks
+      }
+
+      // 2. Secondary: Try Direct Gemini REST API if user saved API key in localStorage
+      const key = aiApiKey || localStorage.getItem('taskflow-ai-key');
+      if (key && key !== 'your_gemini_api_key_here') {
+        const activeTasksStr = tasks.slice(0, 10).map(t => `- "${t.title}" (${t.category}, Priority: ${t.priority}, Due: ${t.dueDate || 'None'}, Completed: ${t.completed})`).join('\n');
+        const systemPrompt = `You are TaskFlow AI, an intelligent productivity companion.
 CURRENT USER TASKS:
 ${activeTasksStr}
 
 USER PROMPT: "${userPrompt}"
-Respond helpfully, concisely (under 120 words), and format with clean markdown bullet points.`;
+Respond helpfully, concisely (under 120 words), and format with clean markdown.`;
 
-      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
-      for (const modelName of candidateModels) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) return text;
+        const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+        for (const modelName of candidateModels) {
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) return text;
+            }
+          } catch (err) {
+            console.warn(`Direct Gemini API failed with ${modelName}:`, err);
           }
-        } catch (err) {
-          console.warn(`Direct Gemini API failed with ${modelName}:`, err);
         }
       }
+
+      // 3. Fallback: Intelligent Client-Side NLP Engine
+      return generateFallbackNlpResponse(userPrompt);
     }
 
-    // 3. Fallback: Intelligent Client-Side NLP Engine
-    return generateFallbackNlpResponse(userPrompt);
-  }
+    function processDirectTaskActionCommand(promptText) {
+      const lower = promptText.toLowerCase().trim();
 
-  function generateFallbackNlpResponse(promptText) {
-    const text = promptText.toLowerCase();
-    const activeTasks = tasks.filter(t => !t.completed);
-    const completedTasks = tasks.filter(t => t.completed);
-    const highPriority = activeTasks.filter(t => t.priority === 'high');
-    const today = getTodayStr();
-    const dueToday = activeTasks.filter(t => t.dueDate === today);
+      // Action 1: Add Task
+      if (lower.startsWith('add task') || lower.startsWith('create task') || lower.startsWith('new task') || lower.startsWith('remind me to')) {
+        let title = promptText.replace(/^(add task|create task|new task|remind me to)\s*/i, '').trim();
+        if (!title) title = 'New AI Task';
 
-    if (text.includes('priority') || text.includes('top') || text.includes('important')) {
-      if (highPriority.length === 0) {
-        return `🌟 <strong>Great job!</strong> You have no high-priority tasks pending right now. Total active tasks: <strong>${activeTasks.length}</strong>.`;
+        const newTask = {
+          id: generateId(),
+          title: title,
+          description: 'Added via TaskFlow AI Copilot',
+          category: 'Work',
+          priority: 'medium',
+          dueDate: getTodayStr(),
+          completed: false,
+          subtasks: [],
+          createdAt: Date.now()
+        };
+
+        tasks.unshift(newTask);
+        saveTasks();
+        renderTodayCards();
+        renderTasks();
+        updateStats();
+        updateWeeklyChart();
+        showToast(`Created task: "${title}"`, 'success');
+
+        return `✅ <strong>Task Created Successfully!</strong><br>• Title: <strong>"${escapeHtml(title)}"</strong><br>• Category: <strong>Work</strong><br>• Priority: <strong>Medium</strong><br>• Due: <strong>Today</strong>`;
       }
-      const listHtml = highPriority.slice(0, 3).map(t => `• <strong>${escapeHtml(t.title)}</strong> (${t.category})`).join('<br>');
-      return `🎯 <strong>Top High-Priority Tasks (${highPriority.length}):</strong><br>${listHtml}<br><br><em>Tip: Focus on completing these first to maintain momentum!</em>`;
-    }
 
-    if (text.includes('schedule') || text.includes('today') || text.includes('plan')) {
-      if (activeTasks.length === 0) {
-        return `🎉 Your schedule is clear! All tasks are completed. Use the add task form to start your next milestone.`;
+      // Action 2: Toggle Theme (Dark / Light Mode)
+      if (lower.includes('dark mode') || lower.includes('light mode') || lower.includes('toggle theme') || lower.includes('change theme')) {
+        let newTheme = 'dark';
+        if (lower.includes('light')) newTheme = 'light';
+        else if (theme === 'dark' && !lower.includes('dark')) newTheme = 'light';
+
+        theme = newTheme;
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('taskflow-theme', theme);
+        if (themeToggle) themeToggle.checked = (theme === 'dark');
+
+        showToast(`Switched to ${theme} theme`, 'info');
+        return theme === 'dark' ? `🌙 <strong>Dark Mode Activated!</strong>` : `☀️ <strong>Light Mode Activated!</strong>`;
       }
-      const todayList = dueToday.length > 0 ? dueToday : activeTasks.slice(0, 3);
-      const scheduleHtml = todayList.map((t, idx) => `<strong>${9 + idx * 2}:00 AM</strong> — ${escapeHtml(t.title)} <span style="opacity:0.8">(${t.priority.toUpperCase()})</span>`).join('<br>');
-      return `📅 <strong>Suggested Daily Schedule:</strong><br>${scheduleHtml}<br><br>💡 <em>Take 10-minute breaks between deep work sessions!</em>`;
+
+      // Action 3: Clear Completed Tasks
+      if (lower.includes('clear completed') || lower.includes('delete completed')) {
+        const completedCount = tasks.filter(t => t.completed).length;
+        if (completedCount === 0) {
+          return `ℹ️ You have no completed tasks to clear.`;
+        }
+        tasks = tasks.filter(t => !t.completed);
+        saveTasks();
+        renderTodayCards();
+        renderTasks();
+        updateStats();
+        updateWeeklyChart();
+        showToast(`Cleared ${completedCount} completed tasks`, 'success');
+        return `🧹 <strong>Cleared ${completedCount} completed tasks!</strong>`;
+      }
+
+      return null;
     }
 
-    if (text.includes('tip') || text.includes('help') || text.includes('overdue') || text.includes('advice')) {
-      return `💡 <strong>Productivity Booster Tips:</strong><br>
-• <strong>2-Minute Rule:</strong> If a subtask takes under 2 mins, do it right away.<br>
-• <strong>Category Focus:</strong> Group your <strong>${activeTasks.length} active tasks</strong> by category to reduce context switching.<br>
-• <strong>Subtask Breakdown:</strong> Break large tasks into checklist items to stay motivated!`;
+    function generateFallbackNlpResponse(promptText) {
+      const text = promptText.toLowerCase();
+      const activeTasks = tasks.filter(t => !t.completed);
+      const completedTasks = tasks.filter(t => t.completed);
+      const highPriority = activeTasks.filter(t => t.priority === 'high');
+      const today = getTodayStr();
+      const dueToday = activeTasks.filter(t => t.dueDate === today);
+
+      if (text.includes('priority') || text.includes('top') || text.includes('important')) {
+        if (highPriority.length === 0) {
+          return `🌟 <strong>Great job!</strong> You have no high-priority tasks pending right now. Total active tasks: <strong>${activeTasks.length}</strong>.`;
+        }
+        const listHtml = highPriority.slice(0, 3).map(t => `• <strong>${escapeHtml(t.title)}</strong> (${t.category})`).join('<br>');
+        return `🎯 <strong>Top High-Priority Tasks (${highPriority.length}):</strong><br>${listHtml}<br><br><em>Tip: Focus on completing these first to maintain momentum!</em>`;
+      }
+
+      if (text.includes('schedule') || text.includes('today') || text.includes('plan')) {
+        if (activeTasks.length === 0) {
+          return `🎉 Your schedule is clear! All tasks are completed. Speak or type "add task..." to create a new task.`;
+        }
+        const todayList = dueToday.length > 0 ? dueToday : activeTasks.slice(0, 3);
+        const scheduleHtml = todayList.map((t, idx) => `<strong>${9 + idx * 2}:00 AM</strong> — ${escapeHtml(t.title)} <span style="opacity:0.8">(${t.priority.toUpperCase()})</span>`).join('<br>');
+        return `📅 <strong>Suggested Daily Schedule:</strong><br>${scheduleHtml}<br><br>💡 <em>Take 10-minute breaks between deep work sessions!</em>`;
+      }
+
+      if (text.includes('tip') || text.includes('help') || text.includes('overdue') || text.includes('advice')) {
+        return `💡 <strong>Productivity Booster Tips:</strong><br>
+  • <strong>2-Minute Rule:</strong> If a subtask takes under 2 mins, do it right away.<br>
+  • <strong>Category Focus:</strong> Group your <strong>${activeTasks.length} active tasks</strong> by category to reduce context switching.<br>
+  • <strong>Voice Commands:</strong> Click 🎤 and say <em>"add task Buy groceries"</em> or <em>"Turn dark mode on"</em>!`;
+      }
+
+      // General Task Overview Response
+      const activeCount = activeTasks.length;
+      const doneCount = completedTasks.length;
+      const rate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+
+      return `🤖 <strong>TaskFlow Summary:</strong><br>
+  • Active Tasks: <strong>${activeCount}</strong><br>
+  • Completed Tasks: <strong>${doneCount}</strong><br>
+  • Completion Rate: <strong>${rate}%</strong><br><br>
+  Speak or type <em>"add task Buy coffee"</em> or <em>"Turn dark mode on"</em>!`;
     }
 
-    // General Task Overview Response
-    const activeCount = activeTasks.length;
-    const doneCount = completedTasks.length;
-    const rate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
-
-    return `🤖 <strong>TaskFlow Summary:</strong><br>
-• Active Tasks: <strong>${activeCount}</strong><br>
-• Completed Tasks: <strong>${doneCount}</strong><br>
-• Completion Rate: <strong>${rate}%</strong><br><br>
-How else can I help you organize your workflow today?`;
+    function formatAiResponseMarkdown(rawText) {
+      if (!rawText) return '';
+      let formatted = rawText
+        .replace(/\n\n/g, '<br><br>')
+        .replace(/\n/g, '<br>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
+      return formatted;
+    }
   }
-
-  function formatAiResponseMarkdown(rawText) {
-    if (!rawText) return '';
-    let formatted = rawText
-      .replace(/\n\n/g, '<br><br>')
-      .replace(/\n/g, '<br>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>');
-    return formatted;
-  }
-}
 });
 

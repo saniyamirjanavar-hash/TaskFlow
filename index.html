@@ -558,7 +558,19 @@
           <div class="ai-bot-title">TaskFlow AI Copilot</div>
           <div class="ai-bot-status"><span class="status-pulse"></span> Online & Ready</div>
         </div>
-        <button id="ai-close-btn" class="ai-icon-sm" title="Close Chat">✕</button>
+        <div style="display: flex; gap: 0.35rem; margin-left: auto; align-items: center;">
+          <button type="button" id="ai-tts-toggle" class="ai-icon-sm" title="Toggle Voice Responses (Speech Output)">🔊</button>
+          <button type="button" id="ai-clear-chat" class="ai-icon-sm" title="Clear Chat History">🧹</button>
+          <button type="button" id="ai-close-btn" class="ai-icon-sm" title="Close Chat">✕</button>
+        </div>
+      </div>
+
+      <!-- Listening Banner -->
+      <div id="ai-listening-banner" class="listening-banner" style="display: none;">
+        <span style="display: flex; align-items: center; gap: 0.4rem;">
+          <span class="listening-pulse-dot"></span> Recording voice... Speak your command
+        </span>
+        <button type="button" id="ai-stop-mic-btn" style="background:none; border:none; color:#ef4444; font-weight:800; cursor:pointer;">Stop</button>
       </div>
 
       <!-- API Key Panel -->
@@ -566,9 +578,9 @@
         <label for="ai-key-input">Gemini API Key (Optional)</label>
         <div class="api-key-row">
           <input type="password" id="ai-key-input" placeholder="Paste your Gemini API key..." autocomplete="off">
-          <button id="ai-key-save-btn" class="api-save-btn">Save</button>
+          <button type="button" id="ai-key-save-btn" class="api-save-btn">Save</button>
         </div>
-        <span class="api-note">Saved in browser storage. Built-in AI fallback runs automatically.</span>
+        <span class="api-note">Saved in browser storage. Built-in AI action engine runs automatically.</span>
       </div>
 
       <!-- Chat Messages Container -->
@@ -576,19 +588,28 @@
         <div class="chat-msg bot-msg">
           <div class="chat-avatar">🤖</div>
           <div class="chat-text">
-            Hello! I'm your <strong>TaskFlow AI Copilot</strong>. Ask me anything about your tasks, or select a quick action below:
+            Hello! I'm your <strong>TaskFlow AI Copilot</strong>. Speak or type commands like <em>"add task Buy groceries"</em> or <em>"Turn dark mode on"</em>!
             <div class="prompt-chips">
-              <button type="button" class="chip-btn" data-prompt="What are my top priorities for today?">🎯 Today's Top Priorities</button>
+              <button type="button" class="chip-btn" data-prompt="Add task Finish project report">➕ Add Task</button>
+              <button type="button" class="chip-btn" data-prompt="Turn dark mode on">🌙 Dark Mode</button>
+              <button type="button" class="chip-btn" data-prompt="What are my top priorities for today?">🎯 Top Priorities</button>
               <button type="button" class="chip-btn" data-prompt="Suggest a schedule for my active tasks">📅 Suggest Schedule</button>
-              <button type="button" class="chip-btn" data-prompt="Give me productivity tips for my overdue tasks">💡 Productivity Tips</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Input Bar -->
+      <!-- Input Bar with Microphone and Send Button -->
       <form id="ai-chat-form" class="ai-chat-input-bar">
-        <input type="text" id="ai-chat-input" placeholder="Ask AI Copilot anything..." autocomplete="off">
+        <input type="text" id="ai-chat-input" placeholder="Type or click 🎤 to record voice command..." autocomplete="off">
+        <button type="button" id="ai-mic-btn" class="ai-mic-btn" title="Click to record voice command">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </button>
         <button type="submit" id="ai-send-btn" class="ai-send-btn" title="Send message">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
