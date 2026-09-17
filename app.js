@@ -2216,18 +2216,23 @@ document.addEventListener('DOMContentLoaded', () => {
           { title: 'Fetch calendar events for day view', completed: false }
         ],
         createdAt: Date.now() - 3600000 * 3
-      },
+      }
+    ];
+  }
+
   // ==========================================
   // TASKFLOW AI CHATBOT COPILOT MODULE
   // ==========================================
-  const aiTriggerBtn = document.getElementById('ai-trigger-btn');
-  const aiChatWindow = document.getElementById('ai-chat-window');
-  const aiCloseBtn = document.getElementById('ai-close-btn');
-  const aiChatMessages = document.getElementById('ai-chat-messages');
-  const aiChatForm = document.getElementById('ai-chat-form');
-  const aiChatInput = document.getElementById('ai-chat-input');
-  const aiKeyInput = document.getElementById('ai-key-input');
-  const aiKeySaveBtn = document.getElementById('ai-key-save-btn');
+  function setupAiChatbot() {
+    const aiTriggerBtn = document.getElementById('ai-trigger-btn');
+    const headerAiBtn = document.getElementById('header-ai-btn');
+    const aiChatWindow = document.getElementById('ai-chat-window');
+    const aiCloseBtn = document.getElementById('ai-close-btn');
+    const aiChatMessages = document.getElementById('ai-chat-messages');
+    const aiChatForm = document.getElementById('ai-chat-form');
+    const aiChatInput = document.getElementById('ai-chat-input');
+    const aiKeyInput = document.getElementById('ai-key-input');
+    const aiKeySaveBtn = document.getElementById('ai-key-save-btn');
 
   if (aiKeyInput) {
     aiKeyInput.value = aiApiKey || '';
@@ -2446,5 +2451,6 @@ How else can I help you organize your workflow today?`;
       .replace(/\*(.*?)\*/g, '<em>$1</em>');
     return formatted;
   }
+}
 });
 
