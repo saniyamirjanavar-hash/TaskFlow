@@ -2576,10 +2576,10 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         if (found) return found;
 
         // 2. Title contains search or search contains title
-        found = taskList.find(t => t.title.toLowerCase().includes(searchLower));
-        if (found) return found;
-        found = taskList.find(t => searchLower.includes(t.title.toLowerCase()));
-        if (found) return found;
+        if (searchName.length > 3) {
+          found = taskList.find(t => t.title.toLowerCase().includes(searchLower) || searchLower.includes(t.title.toLowerCase()));
+          if (found) return found;
+        }
 
         // 3. Check if any task title words appear significantly in the search
         let bestMatch = null;
@@ -2597,9 +2597,9 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         }
         if (bestMatch) return bestMatch;
 
-        // 4. Check if any task title appears anywhere in the full input
+        // 4. Check if any task title appears anywhere in the full input (only safe for words > 3 chars)
         for (const t of taskList) {
-          if (lower.includes(t.title.toLowerCase())) {
+          if (t.title.length > 3 && lower.includes(t.title.toLowerCase())) {
             return t;
           }
         }
@@ -2613,11 +2613,15 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         'remind me to', 'i want to add', 'add this task', 'add a new task',
         'make a task', 'add writing assignment', 'please add'
       ];
+      
+      const cleanLower = lower.replace(/^(hey|hi|hello|please|can you|could you|i want to|i need to)\s+/i, '').trim();
+      
       const isAddIntent = addKeywords.some(kw => lower.includes(kw))
         || (lower.includes('add') && lower.includes('task'))
-        || /^(add|create|make)\s+/i.test(lower);
+        || /^(add|create|make|remind|schedule|review|update|fix|write|read|buy|call|email|send|check)\s+/i.test(cleanLower)
+        || /(make|set|change)\s*(the)?\s*priority/i.test(lower);
 
-      if (isAddIntent && !lower.match(/\b(delete|remove|complete|finish)\b/)) {
+      if (isAddIntent && !lower.match(/\b(delete|remove|erase|trash|get rid of|eliminate|drop|complete|finish|mark as done|mark done|mark as completed|mark completed|check off)\b/)) {
         let taskTitle = '';
 
         // Extract title using natural patterns:
@@ -2628,10 +2632,11 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         } else if (lower.includes(' titled ')) {
           taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' titled ') + 8).trim();
         } else {
-          taskTitle = promptText.replace(/^(hello|hi|please|hey|can you|could you|i want to|i'd like to)?\s*(please)?\s*(add|create|make)\s*(a|an|this|the|new)?\s*(task|todo|item)?\s*(called|named|titled|to|for|as)?\s*/i, '').trim();
+          taskTitle = promptText.replace(/^(hello|hi|please|hey|can you|could you|i want to|i'd like to|i need to)?\s*(please)?\s*(add|create|make|remind me to|remind me|schedule)?\s*(a|an|this|the|new)?\s*(task|todo|item)?\s*(called|named|titled|to|for|as)?\s*/i, '').trim();
         }
 
-        // Clean conversational suffix filler
+        // Clean conversational and priority suffix fillers
+        taskTitle = taskTitle.replace(/\s+(make|set|change)?\s*(the)?\s*priority\s*(as|to|is)?\s*(high|medium|low).*$/i, '').trim();
         taskTitle = taskTitle.replace(/\s+(so please|please|in my|to my|app|application|to do app|in to do|for me|right now|now).*$/i, '').trim();
         taskTitle = taskTitle.replace(/^a\s+/i, '').trim();
         taskTitle = taskTitle.replace(/^["'\u201c\u201d\u2018\u2019]+|["'\u201c\u201d\u2018\u2019]+$/g, '');
@@ -2831,7 +2836,7 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
       const dueToday = activeTasks.filter(t => t.dueDate === today);
 
       // --- Greetings ---
-      if (/^(hi|hello|hey|yo|sup|good morning|good afternoon|good evening|howdy|hola|namaste)\b/.test(text)) {
+      if (/^(hi|hello|hey|yo|sup|good morning|good afternoon|good evening|howdy|hola|namaste)\b/i.test(text) && text.split(/\s+/).length <= 4) {
         const hour = new Date().getHours();
         let greeting = 'Hello';
         if (hour < 12) greeting = 'Good morning';
