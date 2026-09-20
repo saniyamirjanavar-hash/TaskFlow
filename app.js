@@ -2409,14 +2409,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    const aiSendBtn = document.getElementById('ai-send-btn');
+    
+    function handleAiSubmit(e) {
+      if (e) e.preventDefault();
+      const text = aiChatInput.value.trim();
+      if (!text) return;
+      sendAiUserMessage(text);
+      aiChatInput.value = '';
+    }
+
     if (aiChatForm && aiChatInput) {
-      aiChatForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const text = aiChatInput.value.trim();
-        if (!text) return;
-        sendAiUserMessage(text);
-        aiChatInput.value = '';
-      });
+      aiChatForm.addEventListener('submit', handleAiSubmit);
+    }
+    
+    if (aiSendBtn) {
+      aiSendBtn.addEventListener('click', handleAiSubmit);
     }
 
     async function sendAiUserMessage(promptText) {
@@ -2618,8 +2626,7 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
       
       const isAddIntent = addKeywords.some(kw => lower.includes(kw))
         || (lower.includes('add') && lower.includes('task'))
-        || /^(add|create|make|remind|schedule|review|update|fix|write|read|buy|call|email|send|check)\s+/i.test(cleanLower)
-        || /(make|set|change)\s*(the)?\s*priority/i.test(lower);
+        || /^(add|create|make|remind|schedule|review|update|fix|write|read|buy|call|email|send|check)\s+/i.test(cleanLower);
 
       if (isAddIntent && !lower.match(/\b(delete|remove|erase|trash|get rid of|eliminate|drop|complete|finish|mark as done|mark done|mark as completed|mark completed|check off)\b/)) {
         let taskTitle = '';
@@ -2819,9 +2826,9 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         return `\ud83d\udcca <strong>Task Count:</strong><br>\u2022 Total: <strong>${tasks.length}</strong><br>\u2022 Active: <strong>${activeTasks.length}</strong><br>\u2022 Completed: <strong>${completedTasks.length}</strong>`;
       }
 
-      // --- INTENT 8: RENAME / EDIT TASK ---
-      if (/\b(rename|change name|edit title|update title|change title)\b/.test(lower)) {
-        return `\u270f\ufe0f <strong>To rename a task:</strong><br>Click on the task in your dashboard and edit it directly. <em>Inline editing coming soon to the copilot!</em>`;
+      // --- INTENT 8: EDIT TASK (RENAME / PRIORITY) ---
+      if (/\b(rename|change name|edit|update title|change title|change priority|update priority|set priority)\b/.test(lower)) {
+        return `\u270f\ufe0f <strong>To edit a task:</strong><br>Click on the task in your dashboard to edit its title, priority, or category directly. <em>Inline editing is coming soon to the copilot!</em>`;
       }
 
       return null;
