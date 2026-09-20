@@ -15,7 +15,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=7.0">
+  <link rel="stylesheet" href="styles.css?v=8.0">
 </head>
 <body>
   <!-- 3D ANIMATED CANVAS BACKGROUND -->
@@ -355,72 +355,6 @@
     </div>
   </div>
 
-  <!-- AI TASK COPILOT FLOATING CHATBOT WIDGET -->
-  <div id="ai-chatbot-widget" class="ai-chatbot-widget">
-    <button id="ai-trigger-btn" class="ai-trigger-btn" aria-label="Open AI Task Assistant" title="TaskFlow AI Copilot">
-      <div class="ai-btn-glow"></div>
-      <div class="ai-btn-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.5 7.5"/><path d="M12 12v10"/><path d="M12 12l9.5-4.5"/></svg>
-      </div>
-      <span class="ai-btn-badge">TaskFlow AI</span>
-    </button>
-
-    <div id="ai-chat-window" class="ai-chat-window" style="display:none;">
-      <div class="ai-chat-header">
-        <div class="ai-bot-avatar">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.5 7.5"/><path d="M12 12v10"/></svg>
-        </div>
-        <div class="ai-header-text" style="flex:1;">
-          <div class="ai-bot-title">TaskFlow AI</div>
-          <div class="ai-bot-status"><span class="status-pulse"></span> Intelligent Productivity Companion</div>
-        </div>
-        <button id="ai-tts-toggle" class="ai-icon-sm" title="Toggle Voice Responses (TTS)">🔊</button>
-        <button id="ai-clear-chat" class="ai-icon-sm" title="Clear Conversation">🧹</button>
-        <button id="ai-settings-btn" class="ai-icon-sm" title="API Settings">⚙️</button>
-        <button id="ai-chat-close" class="ai-icon-sm" title="Minimize / Close">✕</button>
-      </div>
-
-      <div id="ai-listening-banner" class="listening-banner" style="display:none;">
-        <span>🎙️ Listening for voice command...</span>
-        <span class="listening-pulse-dot"></span>
-      </div>
-
-      <div id="ai-api-panel" class="ai-api-panel" style="display:none;">
-        <label for="ai-api-key-input">Gemini / OpenAI API Key (Optional)</label>
-        <div class="api-key-row">
-          <input type="password" id="ai-api-key-input" placeholder="Paste your API key here..." autocomplete="off">
-          <button id="ai-save-key-btn" class="api-save-btn">Save</button>
-        </div>
-        <span class="api-note">✨ Built-in NLP active! Optional cloud key enables advanced LLM reasoning.</span>
-      </div>
-
-      <div id="ai-chat-messages" class="ai-chat-messages">
-        <div class="chat-msg bot-msg">
-          <div class="chat-avatar">🤖</div>
-          <div class="chat-text">
-            Hello! I am <strong>TaskFlow AI</strong>, your intelligent productivity companion. You can ask me to create, complete, edit, or filter tasks, change settings, or ask for productivity insights!
-            <div class="prompt-chips">
-              <button class="chip-btn" data-prompt="Add a high priority study task to revise JavaScript tomorrow">✨ Add study task</button>
-              <button class="chip-btn" data-prompt="Show high priority tasks">🔥 High priority</button>
-              <button class="chip-btn" data-prompt="Turn dark mode on">🌙 Dark mode</button>
-              <button class="chip-btn" data-prompt="What are my statistics?">📊 Task stats</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="ai-chat-input-bar">
-        <input type="text" id="ai-input" placeholder="Type or speak a command..." autocomplete="off">
-        <button id="ai-mic-btn" class="ai-mic-btn" aria-label="Voice command input" title="Voice Command">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        </button>
-        <button id="ai-send-btn" class="ai-send-btn" aria-label="Send prompt" title="Send Command">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- PROFILE MODAL -->
   <div id="profile-modal" class="modal-overlay" aria-hidden="true" role="dialog">
     <div class="modal-card modal-sm">
@@ -627,6 +561,6 @@
   <script async defer src="https://accounts.google.com/gsi/client" onload="if(window.GoogleCalendarAPI) window.GoogleCalendarAPI.gisLoaded()"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="if(window.GoogleCalendarAPI) window.GoogleCalendarAPI.gapiLoaded()"></script>
   <script src="google-calendar.js"></script>
-  <script src="app.js?v=7.0"></script>
+  <script src="app.js?v=8.0"></script>
 </body>
 </html>
