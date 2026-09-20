@@ -2237,6 +2237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiStopMicBtn = document.getElementById('ai-stop-mic-btn');
     const aiListeningBanner = document.getElementById('ai-listening-banner');
     const aiTtsToggle = document.getElementById('ai-tts-toggle');
+    const aiStopSpeechBtn = document.getElementById('ai-stop-speech-btn');
     const aiClearChat = document.getElementById('ai-clear-chat');
 
     let ttsEnabled = localStorage.getItem('taskflow-tts') !== 'false';
@@ -2256,6 +2257,15 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    if (aiStopSpeechBtn) {
+      aiStopSpeechBtn.addEventListener('click', () => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+        showToast('AI stopped speaking', 'info');
+      });
+    }
+
     if (aiTtsToggle) {
       aiTtsToggle.style.opacity = ttsEnabled ? '1' : '0.5';
       aiTtsToggle.addEventListener('click', () => {
@@ -2263,6 +2273,9 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('taskflow-tts', ttsEnabled);
         aiTtsToggle.style.opacity = ttsEnabled ? '1' : '0.5';
         showToast(`Voice responses ${ttsEnabled ? 'enabled 🔊' : 'muted 🔇'}`, 'info');
+        if (!ttsEnabled && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
       });
     }
 
@@ -2318,12 +2331,21 @@ document.addEventListener('DOMContentLoaded', () => {
           isRecording = true;
           if (aiMicBtn) aiMicBtn.classList.add('listening');
           if (aiListeningBanner) aiListeningBanner.style.display = 'flex';
+          // Stop AI from talking when user starts speaking
+          if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+          }
         };
 
         recognition.onresult = (e) => {
           const transcript = e.results[0][0].transcript;
-          if (aiChatInput) aiChatInput.value = transcript;
-          sendAiUserMessage(transcript);
+          if (aiChatInput) {
+            // Append to existing text with a space if there's already text
+            const currentVal = aiChatInput.value.trim();
+            aiChatInput.value = currentVal ? currentVal + ' ' + transcript : transcript;
+            aiChatInput.focus();
+            showToast('Voice transcribed. You can edit before sending!', 'info');
+          }
         };
 
         recognition.onerror = (err) => {
