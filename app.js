@@ -2528,40 +2528,94 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
     function processDirectTaskActionCommand(promptText) {
       const lower = promptText.toLowerCase().trim();
 
+      // --- Helper: Extract task name from natural language ---
+      function extractTaskName(input) {
+        let name = input;
+        // Remove common filler words and phrases to extract the actual task name
+        name = name.replace(/^(hey|hi|hello|please|can you|could you|i want to|i'd like to|i would like to|would you|will you|go ahead and|just|kindly)\s+/gi, '');
+        name = name.replace(/\s+(please|for me|from my tasks|from my list|from the list|from tasks|from the task list|in my tasks|in my list|right now|now|asap|immediately)$/gi, '');
+        // Remove action verbs and connectors
+        name = name.replace(/^(delete|remove|erase|trash|get rid of|eliminate|drop|cancel|complete|finish|mark as done|mark done|mark as completed|mark completed|check off)\s+/gi, '');
+        // Remove "the task" / "a task" / "task" with optional "called" / "named" / "titled" / "with name" / "with title"
+        name = name.replace(/^(the\s+)?task\s+(called|named|titled|with name|with title)?\s*/gi, '');
+        name = name.replace(/^(called|named|titled)\s+/gi, '');
+        // Remove surrounding quotes
+        name = name.replace(/^["'\u201c\u201d\u2018\u2019]+|["'\u201c\u201d\u2018\u2019]+$/g, '');
+        return name.trim();
+      }
+
+      // --- Helper: Find task by fuzzy title match ---
+      function findTaskByName(searchName, taskList) {
+        if (!searchName || searchName.length < 2) return null;
+        const searchLower = searchName.toLowerCase();
+
+        // 1. Exact match
+        let found = taskList.find(t => t.title.toLowerCase() === searchLower);
+        if (found) return found;
+
+        // 2. Title contains search or search contains title
+        found = taskList.find(t => t.title.toLowerCase().includes(searchLower));
+        if (found) return found;
+        found = taskList.find(t => searchLower.includes(t.title.toLowerCase()));
+        if (found) return found;
+
+        // 3. Check if any task title words appear significantly in the search
+        let bestMatch = null;
+        let bestScore = 0;
+        for (const t of taskList) {
+          const titleWords = t.title.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+          const searchWords = searchLower.split(/\s+/).filter(w => w.length > 2);
+          if (titleWords.length === 0) continue;
+          const matchingWords = titleWords.filter(tw => searchWords.some(sw => sw.includes(tw) || tw.includes(sw)));
+          const score = matchingWords.length / titleWords.length;
+          if (score > bestScore && score >= 0.5) {
+            bestScore = score;
+            bestMatch = t;
+          }
+        }
+        if (bestMatch) return bestMatch;
+
+        // 4. Check if any task title appears anywhere in the full input
+        for (const t of taskList) {
+          if (lower.includes(t.title.toLowerCase())) {
+            return t;
+          }
+        }
+
+        return null;
+      }
+
       // --- INTENT 1: ADD / CREATE TASK ---
       const addKeywords = [
         'add task', 'add a task', 'create task', 'create a task', 'new task',
         'remind me to', 'i want to add', 'add this task', 'add a new task',
         'make a task', 'add writing assignment', 'please add'
       ];
-      const isAddIntent = addKeywords.some(kw => lower.includes(kw)) || (lower.includes('add') && lower.includes('task'));
+      const isAddIntent = addKeywords.some(kw => lower.includes(kw))
+        || (lower.includes('add') && lower.includes('task'))
+        || /^(add|create|make)\s+/i.test(lower);
 
-      if (isAddIntent) {
+      if (isAddIntent && !lower.match(/\b(delete|remove|complete|finish)\b/)) {
         let taskTitle = '';
 
         // Extract title using natural patterns:
-        if (lower.includes(' as a ')) {
-          taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' as a ') + 6).trim();
-        } else if (lower.includes(' as ')) {
-          taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' as ') + 4).trim();
-        } else if (lower.includes(' called ')) {
+        if (lower.includes(' called ')) {
           taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' called ') + 8).trim();
         } else if (lower.includes(' named ')) {
           taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' named ') + 7).trim();
-        } else if (lower.includes(' to ')) {
-          taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' to ') + 4).trim();
-        } else if (lower.includes(' for ')) {
-          taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' for ') + 5).trim();
+        } else if (lower.includes(' titled ')) {
+          taskTitle = promptText.substring(promptText.toLowerCase().indexOf(' titled ') + 8).trim();
         } else {
-          taskTitle = promptText.replace(/^(hello|hi|please|hey)?\s*(i want to|can you|please)?\s*(add|create|make)\s*(a|this)?\s*(task|todo)?\s*(called|named|to|for|as)?\s*/i, '').trim();
+          taskTitle = promptText.replace(/^(hello|hi|please|hey|can you|could you|i want to|i'd like to)?\s*(please)?\s*(add|create|make)\s*(a|an|this|the|new)?\s*(task|todo|item)?\s*(called|named|titled|to|for|as)?\s*/i, '').trim();
         }
 
         // Clean conversational suffix filler
-        taskTitle = taskTitle.replace(/\s+(so please|please|in my|to my|app|application|to do app|in to do).*$/i, '').trim();
+        taskTitle = taskTitle.replace(/\s+(so please|please|in my|to my|app|application|to do app|in to do|for me|right now|now).*$/i, '').trim();
         taskTitle = taskTitle.replace(/^a\s+/i, '').trim();
+        taskTitle = taskTitle.replace(/^["'\u201c\u201d\u2018\u2019]+|["'\u201c\u201d\u2018\u2019]+$/g, '');
 
         if (!taskTitle || taskTitle.length < 2) {
-          taskTitle = 'Writing Assignment';
+          taskTitle = 'New Task';
         } else {
           taskTitle = taskTitle.charAt(0).toUpperCase() + taskTitle.slice(1);
         }
@@ -2569,19 +2623,19 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         // Auto-detect category
         let category = 'Work';
         const titleLower = taskTitle.toLowerCase();
-        if (titleLower.includes('study') || titleLower.includes('assignment') || titleLower.includes('homework') || titleLower.includes('exam') || titleLower.includes('essay') || titleLower.includes('write') || titleLower.includes('reading')) {
+        if (titleLower.includes('study') || titleLower.includes('assignment') || titleLower.includes('homework') || titleLower.includes('exam') || titleLower.includes('essay') || titleLower.includes('write') || titleLower.includes('reading') || titleLower.includes('class') || titleLower.includes('lecture')) {
           category = 'Study';
-        } else if (titleLower.includes('buy') || titleLower.includes('shop') || titleLower.includes('groceries') || titleLower.includes('store') || titleLower.includes('market')) {
+        } else if (titleLower.includes('buy') || titleLower.includes('shop') || titleLower.includes('groceries') || titleLower.includes('store') || titleLower.includes('market') || titleLower.includes('order')) {
           category = 'Shopping';
-        } else if (titleLower.includes('gym') || titleLower.includes('workout') || titleLower.includes('clean') || titleLower.includes('doctor') || titleLower.includes('call') || titleLower.includes('mom') || titleLower.includes('dad')) {
+        } else if (titleLower.includes('gym') || titleLower.includes('workout') || titleLower.includes('clean') || titleLower.includes('doctor') || titleLower.includes('call') || titleLower.includes('mom') || titleLower.includes('dad') || titleLower.includes('laundry') || titleLower.includes('cook')) {
           category = 'Personal';
         }
 
         // Auto-detect priority
         let priority = 'medium';
-        if (lower.includes('high') || lower.includes('urgent') || lower.includes('important')) {
+        if (lower.includes('high') || lower.includes('urgent') || lower.includes('important') || lower.includes('critical')) {
           priority = 'high';
-        } else if (lower.includes('low')) {
+        } else if (lower.includes('low') || lower.includes('whenever') || lower.includes('no rush')) {
           priority = 'low';
         }
 
@@ -2605,42 +2659,77 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         updateWeeklyChart();
         showToast(`Created task: "${taskTitle}"`, 'success');
 
-        return `✅ <strong>Task Created Successfully!</strong><br>• Title: <strong>"${escapeHtml(taskTitle)}"</strong><br>• Category: <strong>${category}</strong><br>• Priority: <strong>${priority.charAt(0).toUpperCase() + priority.slice(1)}</strong><br>• Due Date: <strong>Today</strong><br><br>🎉 <em>Added to your active task dashboard!</em>`;
+        return `\u2705 <strong>Task Created Successfully!</strong><br>\u2022 Title: <strong>"${escapeHtml(taskTitle)}"</strong><br>\u2022 Category: <strong>${category}</strong><br>\u2022 Priority: <strong>${priority.charAt(0).toUpperCase() + priority.slice(1)}</strong><br>\u2022 Due Date: <strong>Today</strong><br><br>\ud83c\udf89 <em>Added to your active task dashboard!</em>`;
       }
 
-      // --- INTENT 2: COMPLETE TASK ---
-      const isCompleteIntent = (lower.includes('complete') || lower.includes('mark done') || lower.includes('finish') || lower.includes('check off')) && !lower.includes('clear completed');
+      // --- INTENT 5: DELETE / REMOVE TASK (before complete to avoid conflicts) ---
+      const isDeleteIntent = /\b(delete|remove|erase|trash|get rid of|eliminate|drop)\b/.test(lower)
+        && !lower.includes('completed')
+        && (lower.includes('task') || tasks.some(t => lower.includes(t.title.toLowerCase())));
+
+      if (isDeleteIntent) {
+        const taskName = extractTaskName(promptText);
+        let targetTask = findTaskByName(taskName, tasks);
+
+        if (targetTask) {
+          tasks = tasks.filter(t => t.id !== targetTask.id);
+          saveTasks();
+          renderTodayCards();
+          renderTasks();
+          updateStats();
+          updateWeeklyChart();
+          showToast(`Deleted task: "${targetTask.title}"`, 'danger');
+          return `\ud83d\uddd1\ufe0f <strong>Task Deleted!</strong><br>Removed <strong>"${escapeHtml(targetTask.title)}"</strong> from your task list.`;
+        } else {
+          // No matching task found - list available tasks
+          if (tasks.length === 0) {
+            return `\u2139\ufe0f You don't have any tasks to delete. Your task list is empty.`;
+          }
+          const taskListHtml = tasks.slice(0, 5).map(t => `\u2022 "${escapeHtml(t.title)}" ${t.completed ? '\u2705' : '\ud83d\udccb'}`).join('<br>');
+          return `\u26a0\ufe0f <strong>Task not found.</strong> I couldn't find a task matching "<em>${escapeHtml(taskName)}</em>".<br><br>\ud83d\udccb <strong>Your current tasks:</strong><br>${taskListHtml}<br><br><em>Try saying "remove [exact task name]"</em>`;
+        }
+      }
+
+      // --- INTENT 2: COMPLETE / FINISH / MARK DONE TASK ---
+      const isCompleteIntent = /\b(complete|finish|done|mark as done|mark done|mark as completed|mark completed|check off|tick off)\b/.test(lower)
+        && !lower.includes('clear completed');
+
       if (isCompleteIntent) {
         const activeTasks = tasks.filter(t => !t.completed);
         if (activeTasks.length === 0) {
-          return `ℹ️ All tasks are already completed!`;
+          return `\u2139\ufe0f All tasks are already completed! Nothing left to mark as done.`;
         }
 
-        let targetTask = null;
-        for (const t of activeTasks) {
-          if (lower.includes(t.title.toLowerCase())) {
-            targetTask = t;
-            break;
+        const taskName = extractTaskName(promptText);
+        let targetTask = findTaskByName(taskName, activeTasks);
+
+        if (!targetTask) {
+          // Try to find any task title mentioned in the input
+          for (const t of activeTasks) {
+            if (lower.includes(t.title.toLowerCase())) {
+              targetTask = t;
+              break;
+            }
           }
         }
 
-        if (!targetTask) {
-          targetTask = activeTasks[0];
+        if (targetTask) {
+          targetTask.completed = true;
+          saveTasks();
+          renderTodayCards();
+          renderTasks();
+          updateStats();
+          updateWeeklyChart();
+          showToast(`Marked completed: "${targetTask.title}"`, 'success');
+          return `\ud83c\udf89 <strong>Task Completed!</strong><br>Marked <strong>"${escapeHtml(targetTask.title)}"</strong> as done. Great job!`;
+        } else {
+          const taskListHtml = activeTasks.slice(0, 5).map(t => `\u2022 "${escapeHtml(t.title)}" (${t.priority})`).join('<br>');
+          return `\u26a0\ufe0f <strong>Which task?</strong> I couldn't identify which task to complete from "<em>${escapeHtml(taskName)}</em>".<br><br>\ud83d\udccb <strong>Active tasks:</strong><br>${taskListHtml}<br><br><em>Try saying "complete [exact task name]"</em>`;
         }
-
-        targetTask.completed = true;
-        saveTasks();
-        renderTodayCards();
-        renderTasks();
-        updateStats();
-        updateWeeklyChart();
-        showToast(`Marked completed: "${targetTask.title}"`, 'success');
-
-        return `🎉 <strong>Task Completed!</strong><br>Marked <strong>"${escapeHtml(targetTask.title)}"</strong> as completed. Great job!`;
       }
 
       // --- INTENT 3: TOGGLE THEME (DARK / LIGHT MODE) ---
-      if (lower.includes('dark mode') || lower.includes('light mode') || lower.includes('toggle theme') || lower.includes('change theme') || lower.includes('dark theme') || lower.includes('light theme')) {
+      if (lower.includes('dark mode') || lower.includes('light mode') || lower.includes('toggle theme') || lower.includes('change theme') || lower.includes('dark theme') || lower.includes('light theme') || lower.includes('switch theme') || lower.includes('night mode')) {
         let newTheme = 'dark';
         if (lower.includes('light')) newTheme = 'light';
         else if (theme === 'dark' && !lower.includes('dark')) newTheme = 'light';
@@ -2651,14 +2740,14 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         if (themeToggle) themeToggle.checked = (theme === 'dark');
 
         showToast(`Switched to ${theme} theme`, 'info');
-        return theme === 'dark' ? `🌙 <strong>Dark Mode Activated!</strong>` : `☀️ <strong>Light Mode Activated!</strong>`;
+        return theme === 'dark' ? `\ud83c\udf19 <strong>Dark Mode Activated!</strong>` : `\u2600\ufe0f <strong>Light Mode Activated!</strong>`;
       }
 
       // --- INTENT 4: CLEAR COMPLETED TASKS ---
-      if (lower.includes('clear completed') || lower.includes('delete completed') || lower.includes('remove completed')) {
+      if (lower.includes('clear completed') || lower.includes('delete completed') || lower.includes('remove completed') || lower.includes('clean up') || lower.includes('clear all completed') || lower.includes('remove all done') || lower.includes('delete all done')) {
         const completedCount = tasks.filter(t => t.completed).length;
         if (completedCount === 0) {
-          return `ℹ️ You have no completed tasks to clear.`;
+          return `\u2139\ufe0f You have no completed tasks to clear.`;
         }
         tasks = tasks.filter(t => !t.completed);
         saveTasks();
@@ -2667,73 +2756,174 @@ Respond helpfully, concisely (under 120 words), and format with clean markdown.`
         updateStats();
         updateWeeklyChart();
         showToast(`Cleared ${completedCount} completed tasks`, 'success');
-        return `🧹 <strong>Cleared ${completedCount} completed tasks!</strong>`;
+        return `\ud83e\uddf9 <strong>Cleared ${completedCount} completed tasks!</strong>`;
       }
 
-      // --- INTENT 5: DELETE TASK ---
-      if (lower.includes('delete task') || lower.includes('remove task')) {
-        const targetTitle = promptText.replace(/^(delete task|remove task)\s*/i, '').trim();
-        let targetTask = null;
-        if (targetTitle) {
-          targetTask = tasks.find(t => t.title.toLowerCase().includes(targetTitle.toLowerCase()));
+      // --- INTENT 6: LIST / SHOW ALL TASKS ---
+      if (/\b(show|list|display|what are|tell me|view)\b/.test(lower) && /\b(tasks?|to ?do|list|items?)\b/.test(lower)) {
+        const activeTasks = tasks.filter(t => !t.completed);
+        const completedTasks = tasks.filter(t => t.completed);
+
+        if (tasks.length === 0) {
+          return `\ud83d\udccb <strong>No tasks yet!</strong><br>Your task list is empty. Say <em>"add task Buy groceries"</em> to get started!`;
         }
-        if (targetTask) {
-          tasks = tasks.filter(t => t.id !== targetTask.id);
-          saveTasks();
-          renderTodayCards();
-          renderTasks();
-          updateStats();
-          updateWeeklyChart();
-          showToast(`Deleted task: "${targetTask.title}"`, 'danger');
-          return `🗑️ <strong>Deleted task: "${escapeHtml(targetTask.title)}"</strong>`;
+
+        let response = `\ud83d\udccb <strong>Your Tasks (${tasks.length} total):</strong><br><br>`;
+
+        if (activeTasks.length > 0) {
+          response += `<strong>\ud83d\udd35 Active (${activeTasks.length}):</strong><br>`;
+          response += activeTasks.slice(0, 8).map(t => `\u2022 ${escapeHtml(t.title)} <span style="opacity:0.7">[${t.category}, ${t.priority}]</span>`).join('<br>');
+          if (activeTasks.length > 8) response += `<br><em>...and ${activeTasks.length - 8} more</em>`;
         }
+
+        if (completedTasks.length > 0) {
+          response += `<br><br><strong>\u2705 Completed (${completedTasks.length}):</strong><br>`;
+          response += completedTasks.slice(0, 3).map(t => `\u2022 <s>${escapeHtml(t.title)}</s>`).join('<br>');
+          if (completedTasks.length > 3) response += `<br><em>...and ${completedTasks.length - 3} more</em>`;
+        }
+
+        return response;
+      }
+
+      // --- INTENT 7: HOW MANY / COUNT TASKS ---
+      if (/\b(how many|count|number of|total)\b/.test(lower) && /\b(tasks?|to ?do|items?)\b/.test(lower)) {
+        const activeTasks = tasks.filter(t => !t.completed);
+        const completedTasks = tasks.filter(t => t.completed);
+        return `\ud83d\udcca <strong>Task Count:</strong><br>\u2022 Total: <strong>${tasks.length}</strong><br>\u2022 Active: <strong>${activeTasks.length}</strong><br>\u2022 Completed: <strong>${completedTasks.length}</strong>`;
+      }
+
+      // --- INTENT 8: RENAME / EDIT TASK ---
+      if (/\b(rename|change name|edit title|update title|change title)\b/.test(lower)) {
+        return `\u270f\ufe0f <strong>To rename a task:</strong><br>Click on the task in your dashboard and edit it directly. <em>Inline editing coming soon to the copilot!</em>`;
       }
 
       return null;
     }
 
     function generateFallbackNlpResponse(promptText) {
-      const text = promptText.toLowerCase();
+      const text = promptText.toLowerCase().trim();
       const activeTasks = tasks.filter(t => !t.completed);
       const completedTasks = tasks.filter(t => t.completed);
       const highPriority = activeTasks.filter(t => t.priority === 'high');
       const today = getTodayStr();
       const dueToday = activeTasks.filter(t => t.dueDate === today);
 
-      if (text.includes('priority') || text.includes('top') || text.includes('important')) {
-        if (highPriority.length === 0) {
-          return `🌟 <strong>Great job!</strong> You have no high-priority tasks pending right now. Total active tasks: <strong>${activeTasks.length}</strong>.`;
-        }
-        const listHtml = highPriority.slice(0, 3).map(t => `• <strong>${escapeHtml(t.title)}</strong> (${t.category})`).join('<br>');
-        return `🎯 <strong>Top High-Priority Tasks (${highPriority.length}):</strong><br>${listHtml}<br><br><em>Tip: Focus on completing these first to maintain momentum!</em>`;
-      }
+      // --- Greetings ---
+      if (/^(hi|hello|hey|yo|sup|good morning|good afternoon|good evening|howdy|hola|namaste)\b/.test(text)) {
+        const hour = new Date().getHours();
+        let greeting = 'Hello';
+        if (hour < 12) greeting = 'Good morning';
+        else if (hour < 17) greeting = 'Good afternoon';
+        else greeting = 'Good evening';
 
-      if (text.includes('schedule') || text.includes('today') || text.includes('plan')) {
         if (activeTasks.length === 0) {
-          return `🎉 Your schedule is clear! All tasks are completed. Speak or type "add task..." to create a new task.`;
+          return `${greeting}! \ud83d\udc4b You're all caught up \u2014 no pending tasks! Say <em>"add task..."</em> to create one.`;
         }
-        const todayList = dueToday.length > 0 ? dueToday : activeTasks.slice(0, 3);
-        const scheduleHtml = todayList.map((t, idx) => `<strong>${9 + idx * 2}:00 AM</strong> — ${escapeHtml(t.title)} <span style="opacity:0.8">(${t.priority.toUpperCase()})</span>`).join('<br>');
-        return `📅 <strong>Suggested Daily Schedule:</strong><br>${scheduleHtml}<br><br>💡 <em>Take 10-minute breaks between deep work sessions!</em>`;
+        return `${greeting}! \ud83d\udc4b You have <strong>${activeTasks.length} active task${activeTasks.length > 1 ? 's' : ''}</strong>. ${highPriority.length > 0 ? `<strong>${highPriority.length}</strong> are high priority. ` : ''}How can I help you today?`;
       }
 
-      if (text.includes('tip') || text.includes('help') || text.includes('overdue') || text.includes('advice')) {
-        return `💡 <strong>Productivity Booster Tips:</strong><br>
-  • <strong>2-Minute Rule:</strong> If a subtask takes under 2 mins, do it right away.<br>
-  • <strong>Category Focus:</strong> Group your <strong>${activeTasks.length} active tasks</strong> by category to reduce context switching.<br>
-  • <strong>Voice Commands:</strong> Click 🎤 and say <em>"add task Buy groceries"</em> or <em>"Turn dark mode on"</em>!`;
+      // --- Thank you ---
+      if (/\b(thank|thanks|thx|ty|appreciate)\b/.test(text)) {
+        return `You're welcome! \ud83d\ude0a Let me know if you need anything else with your tasks.`;
       }
 
-      // General Task Overview Response
+      // --- Who are you / what can you do ---
+      if (/\b(who are you|what can you do|what are you|your name|capabilities|features)\b/.test(text)) {
+        return `\ud83e\udd16 I'm <strong>TaskFlow AI Copilot</strong>! Here's what I can do:<br><br>
+\u2022 <strong>Add tasks:</strong> <em>"Add task Buy groceries"</em><br>
+\u2022 <strong>Delete tasks:</strong> <em>"Remove the task called Meeting prep"</em><br>
+\u2022 <strong>Complete tasks:</strong> <em>"Mark Project review as done"</em><br>
+\u2022 <strong>List tasks:</strong> <em>"Show me all my tasks"</em><br>
+\u2022 <strong>Switch theme:</strong> <em>"Turn on dark mode"</em><br>
+\u2022 <strong>Get tips:</strong> <em>"Give me productivity advice"</em><br>
+\u2022 <strong>Voice input:</strong> Click \ud83c\udfa4 to speak commands!`;
+      }
+
+      // --- Priority / Important ---
+      if (text.includes('priority') || text.includes('important') || text.includes('urgent')) {
+        if (highPriority.length === 0) {
+          return `\ud83c\udf1f <strong>Great job!</strong> You have no high-priority tasks pending right now. Total active: <strong>${activeTasks.length}</strong>.`;
+        }
+        const listHtml = highPriority.slice(0, 5).map(t => `\u2022 <strong>${escapeHtml(t.title)}</strong> (${t.category})`).join('<br>');
+        return `\ud83c\udfaf <strong>High-Priority Tasks (${highPriority.length}):</strong><br>${listHtml}<br><br><em>Focus on these first!</em>`;
+      }
+
+      // --- Schedule / Today / Plan ---
+      if (text.includes('schedule') || text.includes('today') || text.includes('plan') || text.includes('for today') || text.includes('my day')) {
+        if (activeTasks.length === 0) {
+          return `\ud83c\udf89 Your schedule is clear! All tasks are completed. Say <em>"add task..."</em> to create a new one.`;
+        }
+        const todayList = dueToday.length > 0 ? dueToday : activeTasks.slice(0, 5);
+        const scheduleHtml = todayList.map((t, idx) => `<strong>${9 + idx * 2}:00 AM</strong> \u2014 ${escapeHtml(t.title)} <span style="opacity:0.8">(${t.priority.toUpperCase()})</span>`).join('<br>');
+        return `\ud83d\udcc5 <strong>Suggested Daily Schedule:</strong><br>${scheduleHtml}<br><br>\ud83d\udca1 <em>Take breaks between deep work sessions!</em>`;
+      }
+
+      // --- Tips / Help / Advice ---
+      if (text.includes('tip') || text.includes('help') || text.includes('advice') || text.includes('suggest') || text.includes('recommend')) {
+        return `\ud83d\udca1 <strong>Productivity Tips:</strong><br>
+\u2022 <strong>2-Minute Rule:</strong> If it takes under 2 mins, do it now.<br>
+\u2022 <strong>Category Focus:</strong> Group your <strong>${activeTasks.length} active tasks</strong> by category.<br>
+\u2022 <strong>Voice Commands:</strong> Click \ud83c\udfa4 and say commands!<br>
+\u2022 <strong>Quick Actions:</strong> <em>"Add task..."</em>, <em>"Remove the task..."</em>, <em>"Complete..."</em>`;
+      }
+
+      // --- Status / Progress / How am I doing ---
+      if (/\b(status|progress|how am i|doing|stats|statistics|overview|summary)\b/.test(text)) {
+        const rate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+        let emoji = '\ud83d\udcca';
+        let encouragement = '';
+        if (rate >= 80) { emoji = '\ud83c\udfc6'; encouragement = 'Outstanding progress!'; }
+        else if (rate >= 50) { emoji = '\ud83d\udcaa'; encouragement = 'Good momentum, keep going!'; }
+        else if (rate > 0) { emoji = '\ud83d\ude80'; encouragement = "You're making progress!"; }
+        else { emoji = '\ud83c\udf31'; encouragement = 'Time to get started!'; }
+
+        return `${emoji} <strong>Your Progress:</strong><br>
+\u2022 Active Tasks: <strong>${activeTasks.length}</strong><br>
+\u2022 Completed: <strong>${completedTasks.length}</strong><br>
+\u2022 Completion Rate: <strong>${rate}%</strong><br>
+\u2022 High Priority Pending: <strong>${highPriority.length}</strong><br><br>
+<em>${encouragement}</em>`;
+      }
+
+      // --- Category search ---
+      const categoryMatch = text.match(/\b(work|study|personal|shopping|health|fitness)\b/);
+      if (categoryMatch && (text.includes('task') || text.includes('show') || text.includes('list') || text.includes('what'))) {
+        const cat = categoryMatch[1].charAt(0).toUpperCase() + categoryMatch[1].slice(1);
+        const catTasks = activeTasks.filter(t => t.category.toLowerCase() === categoryMatch[1]);
+        if (catTasks.length === 0) {
+          return `\ud83d\udcc2 No active <strong>${cat}</strong> tasks found.`;
+        }
+        const listHtml = catTasks.slice(0, 5).map(t => `\u2022 ${escapeHtml(t.title)} (${t.priority})`).join('<br>');
+        return `\ud83d\udcc2 <strong>${cat} Tasks (${catTasks.length}):</strong><br>${listHtml}`;
+      }
+
+      // --- Catch-all: Try to find if user mentioned a specific task name ---
+      for (const t of tasks) {
+        if (text.includes(t.title.toLowerCase()) && t.title.length > 3) {
+          const statusText = t.completed ? '\u2705 Completed' : `\ud83d\udccb Active (${t.priority} priority)`;
+          return `\ud83d\udccc <strong>Task Found: "${escapeHtml(t.title)}"</strong><br>
+\u2022 Status: ${statusText}<br>
+\u2022 Category: ${t.category}<br>
+\u2022 Due: ${t.dueDate || 'No due date'}<br><br>
+<em>Say "complete ${escapeHtml(t.title)}" or "remove ${escapeHtml(t.title)}" to take action.</em>`;
+        }
+      }
+
+      // --- Final fallback: Contextual response with examples ---
       const activeCount = activeTasks.length;
       const doneCount = completedTasks.length;
       const rate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
 
-      return `🤖 <strong>TaskFlow Summary:</strong><br>
-  • Active Tasks: <strong>${activeCount}</strong><br>
-  • Completed Tasks: <strong>${doneCount}</strong><br>
-  • Completion Rate: <strong>${rate}%</strong><br><br>
-  Speak or type <em>"add task Buy coffee"</em> or <em>"Turn dark mode on"</em>!`;
+      let contextResponse = `\ud83e\udd16 I understand you said: <em>"${escapeHtml(promptText)}"</em><br><br>`;
+      contextResponse += `Here's what I can help you with:<br>`;
+      contextResponse += `\u2022 <strong>"Add task [name]"</strong> \u2014 Create a new task<br>`;
+      contextResponse += `\u2022 <strong>"Remove the task [name]"</strong> \u2014 Delete a task<br>`;
+      contextResponse += `\u2022 <strong>"Complete [task name]"</strong> \u2014 Mark as done<br>`;
+      contextResponse += `\u2022 <strong>"Show my tasks"</strong> \u2014 List all tasks<br>`;
+      contextResponse += `\u2022 <strong>"Dark mode"</strong> / <strong>"Light mode"</strong> \u2014 Switch theme<br><br>`;
+      contextResponse += `\ud83d\udcca Currently: <strong>${activeCount} active</strong>, <strong>${doneCount} done</strong> (${rate}% complete)`;
+
+      return contextResponse;
     }
 
     function formatAiResponseMarkdown(rawText) {
