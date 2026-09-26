@@ -315,7 +315,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function closeProfileModal() {
     if (profileModal) profileModal.setAttribute('aria-hidden', 'true');
-      else if (p.includes('medium')) updates.priority = 'medium';
+  }
+
+  // ==========================================
   // GOOGLE CALENDAR INTEGRATION
   // ==========================================
   function onGCalAuthChange() {
