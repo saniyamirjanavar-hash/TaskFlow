@@ -15,7 +15,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles.css?v=9.0">
+  <link rel="stylesheet" href="styles.css?v=10.0">
 </head>
 <body>
   <!-- 3D ANIMATED CANVAS BACKGROUND -->
@@ -493,6 +493,7 @@
           <div class="ai-bot-status"><span class="status-pulse"></span> Online & Ready</div>
         </div>
         <div style="display: flex; gap: 0.35rem; margin-left: auto; align-items: center;">
+          <button type="button" id="ai-settings-btn" class="ai-icon-sm" title="AI Settings (API Key)">⚙️</button>
           <button type="button" id="ai-stop-speech-btn" class="ai-icon-sm" title="Stop AI Speaking (Stop Audio)">⏹️</button>
           <button type="button" id="ai-tts-toggle" class="ai-icon-sm" title="Toggle Voice Responses (Speech Output)">🔊</button>
           <button type="button" id="ai-clear-chat" class="ai-icon-sm" title="Clear Chat History">🧹</button>
@@ -509,7 +510,7 @@
       </div>
 
       <!-- API Key Panel -->
-      <div class="ai-api-panel">
+      <div id="ai-api-panel" class="ai-api-panel" style="display: none;">
         <label for="ai-key-input">Gemini API Key (Optional)</label>
         <div class="api-key-row">
           <input type="password" id="ai-key-input" placeholder="Paste your Gemini API key..." autocomplete="off">
@@ -561,6 +562,6 @@
   <script async defer src="https://accounts.google.com/gsi/client" onload="if(window.GoogleCalendarAPI) window.GoogleCalendarAPI.gisLoaded()"></script>
   <script async defer src="https://apis.google.com/js/api.js" onload="if(window.GoogleCalendarAPI) window.GoogleCalendarAPI.gapiLoaded()"></script>
   <script src="google-calendar.js"></script>
-  <script src="app.js?v=9.0"></script>
+  <script src="app.js?v=10.0"></script>
 </body>
 </html>

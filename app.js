@@ -1380,6 +1380,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiChatInput = document.getElementById('ai-chat-input');
     const aiKeyInput = document.getElementById('ai-key-input');
     const aiKeySaveBtn = document.getElementById('ai-key-save-btn');
+    const aiSettingsBtn = document.getElementById('ai-settings-btn');
+    const aiApiPanel = document.getElementById('ai-api-panel');
     const aiMicBtn = document.getElementById('ai-mic-btn');
     const aiStopMicBtn = document.getElementById('ai-stop-mic-btn');
     const aiListeningBanner = document.getElementById('ai-listening-banner');
@@ -1395,12 +1397,20 @@ document.addEventListener('DOMContentLoaded', () => {
       aiKeyInput.value = aiApiKey || '';
     }
 
+    if (aiSettingsBtn && aiApiPanel) {
+      aiSettingsBtn.addEventListener('click', () => {
+        const isHidden = aiApiPanel.style.display === 'none';
+        aiApiPanel.style.display = isHidden ? 'block' : 'none';
+      });
+    }
+
     if (aiKeySaveBtn && aiKeyInput) {
       aiKeySaveBtn.addEventListener('click', () => {
         const key = aiKeyInput.value.trim();
         aiApiKey = key;
         localStorage.setItem('taskflow-ai-key', key);
         showToast(key ? 'Gemini API Key saved!' : 'Cleared API Key. Using built-in AI.', 'info');
+        if (aiApiPanel) aiApiPanel.style.display = 'none';
       });
     }
 
